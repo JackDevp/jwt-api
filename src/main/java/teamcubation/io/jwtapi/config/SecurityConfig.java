@@ -6,13 +6,16 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.AllArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -21,16 +24,12 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
-import java.security.interfaces.RSAPrivateKey;
-import java.security.interfaces.RSAPublicKey;
-
 @Configuration
 @EnableWebSecurity
+@AllArgsConstructor
 public class SecurityConfig {
-  @Value("${jwt.public.key}")
-  private RSAPublicKey key;
-  @Value("${jwt.private.key}")
-  private RSAPrivateKey privKey;
+
+  private final RsaKeyConfigProperties keyConfigProperties;
 
   @Bean
   SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -39,8 +38,9 @@ public class SecurityConfig {
             auth -> auth
                 .requestMatchers("/authenticate").permitAll()
                 .anyRequest().authenticated())
-        .httpBasic(Customizer.withDefaults())
-        .oauth2ResourceServer(
+            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .httpBasic(Customizer.withDefaults())
+            .oauth2ResourceServer(
             conf -> conf.jwt(
                 jwt -> jwt.decoder(jwtDecoder())));
     return http.build();
@@ -53,12 +53,12 @@ public class SecurityConfig {
 
   @Bean
   JwtDecoder jwtDecoder() {
-    return NimbusJwtDecoder.withPublicKey(this.key).build();
+    return NimbusJwtDecoder.withPublicKey(keyConfigProperties.publicKey()).build();
   } //decodificar o token com chave publica
 
   @Bean
   JwtEncoder jwtEncoder() { // codificar o token com nossa chave privado, que não deve ser compartilhada
-    JWK jwk = new RSAKey.Builder(this.key).privateKey(this.privKey).build();
+    JWK jwk = new RSAKey.Builder(keyConfigProperties.publicKey()).privateKey(keyConfigProperties.privateKey()).build();
     JWKSource<SecurityContext> jwks = new ImmutableJWKSet<>(new JWKSet(jwk));
     return new NimbusJwtEncoder(jwks);
   }
